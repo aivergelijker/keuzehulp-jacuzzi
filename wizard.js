@@ -7,7 +7,7 @@
    over op de pagina, plus de kleine aanvulling onderaan dit bestand
    (.esails-preview-*) voor de live cover-visualisatie.
 
-   MOUNT: <div id="esails-wizard-mount"></div>
+   MOUNT: <div id="esails-jacuzzi-mount"></div>  (eigen id — botst niet met Bootkap)
    CART : form-POST naar /cart (product + quantity) via verborgen iframe.
 
    TE DOEN: vervang elke "ID_..." en placeholder-prijs door de echte
@@ -477,7 +477,7 @@ window.esailsJacuzziWizard = (function () {
 
   /* -------------------- INIT -------------------- */
   function init() {
-    root = $('esails-wizard-mount');
+    root = $('esails-jacuzzi-mount');
     if (!root) return false;
     if (root.getAttribute('data-ej-init') === '1') return true;
     root.setAttribute('data-ej-init', '1');
@@ -497,6 +497,11 @@ window.esailsJacuzziWizard = (function () {
   function injectPreviewCSS() {
     if (document.getElementById('ejPreviewCSS')) return;
     var css =
+      /* De jacuzzi-mount heeft een eigen id en valt dus buiten de Bootkap-selector
+         #esails-wizard-mount. Daarom hier dezelfde container-basis + box-sizing reset,
+         zodat de tool er identiek uitziet zonder de gedeelde CSS aan te passen. */
+      '#esails-jacuzzi-mount,#esails-jacuzzi-mount *{box-sizing:border-box;}' +
+      '#esails-jacuzzi-mount{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:block;max-width:900px;margin:40px auto;padding:30px;background:#ffffff;border:1px solid var(--esails-border,#e2e2e2);border-radius:var(--esails-radius,8px);color:var(--esails-dark,#111);box-shadow:0 4px 20px rgba(0,0,0,0.02);}' +
       '.esails-preview{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:32px 24px;margin-bottom:40px;}' +
       '.esails-preview-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--esails-muted);font-weight:600;text-align:center;margin-bottom:20px;}' +
       '.esails-preview-canvas{display:flex;justify-content:center;align-items:center;min-height:200px;}' +
