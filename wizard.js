@@ -1,483 +1,527 @@
-/* ============================================================================
-   eSails.nl — Jacuzzi-Afdekzeil Keuzehulp  (wizard.js, v3 — Bootkap-huisstijl)
-   ----------------------------------------------------------------------------
-   Begeleide configurator met live meebewegende cover-visualisatie.
-   Bouwt zichzelf volledig op in een mount-div, identiek aan de Bootkap-tool.
+/* =====================================================================
+   eSails Jacuzzi-Afdekzeil Keuzehulp  -  wizard.js  (v4)
+   ---------------------------------------------------------------------
+   Volledig in de Bootkap-huisstijl: dezelfde esails-* classes, dezelfde
+   systeemfont, hetzelfde kleurenpalet (--esails-* tokens) en hetzelfde
+   init-/cart-patroon. Gebruikt de gedeelde Bootkap-CSS — neem die CSS
+   over op de pagina, plus de kleine aanvulling onderaan dit bestand
+   (.esails-preview-*) voor de live cover-visualisatie.
 
-   PLAATSING (zoals Bootkap):
-   1. Zet dit bestand als wizard.js in je GitHub-repo.
-   2. CMS-pagina bevat ALLEEN:  <div id="ej-mount"></div>
-   3. Custom JavaScript-veld:
-      <script src="https://cdn.jsdelivr.net/gh/JOUW-USER/JOUW-REPO@main/wizard.js"></script>
-   4. Vul de echte Lightspeed product-ID's + eenheidsprijzen in (zie CFG).
+   MOUNT: <div id="esails-wizard-mount"></div>
+   CART : form-POST naar /cart (product + quantity) via verborgen iframe.
 
-   CART: form-POST naar /cart met velden 'product' + 'quantity' via verborgen
-   iframe — exact zoals de Bootkap-tool. Veiligheidscheck blokkeert toevoegen
-   zolang er nog VARIANT_-placeholders in CONFIG staan.
-   ============================================================================ */
-(function(){
+   TE DOEN: vervang elke "ID_..." en placeholder-prijs door de echte
+   Lightspeed product-ID's en prijzen in CONFIG hieronder.
+   ===================================================================== */
+window.esailsJacuzziWizard = (function () {
   "use strict";
 
-  /* ========================= CFG — VUL DIT IN ========================= */
-  var CART_ACTION = "/cart";   // Lightspeed C-Series: form-POST naar /cart
-  var P = {
-    pvc:       { id:"VARIANT_PVC",   naam:"Serge Ferrari 705 PVC",    sub:"Mat, 270 cm breed",     prijs:30.95, eenheid:"m" },
-    lijm250:   { id:"VARIANT_L250",  naam:"Saba Contact 70T",         sub:"250 ml + kwast",        prijs:11.75, eenheid:"pot" },
-    lijm1l:    { id:"VARIANT_L1L",   naam:"Saba Contact 70T",         sub:"1 liter",               prijs:34.95, eenheid:"bus" },
-    loxx:      { id:"VARIANT_LOXX",  naam:"Loxx Snelkoppeling Set",   sub:"Koper-vernikkeld",      prijs:27.90, eenheid:"set" },
-    stansblok: { id:"VARIANT_STANS", naam:"eSails Nylon Stansblok",   sub:"Beschermt gereedschap", prijs:26.99, eenheid:"st" },
-    shockcord: { id:"VARIANT_SHOCK", naam:"Shockcord 6 mm",           sub:"Zwart elastiek",        prijs:0.83,  eenheid:"m" },
-    cleaner:   { id:"VARIANT_CLEAN", naam:"Saba Clean 21",            sub:"Ontvetter, 1 L",        prijs:20.95, eenheid:"bus" },
-    uv:        { id:"VARIANT_UV",    naam:"303 Aerospace Protectant", sub:"UV-blocker, 473 ml",    prijs:21.95, eenheid:"fl" }
+  var DOEK_BREEDTE_CM = 270;   // Serge Ferrari 705 doekbreedte
+
+  /* -------------------- CONFIGURATIE -------------------- */
+  var CONFIG = {
+    doek: {
+      antraciet: { id: "ID_PVC_ANTRACIET", naam: "Serge Ferrari 705 — Antraciet", prijs: 30.95, unit: "meter" },
+      zwart:     { id: "ID_PVC_ZWART",     naam: "Serge Ferrari 705 — Jet Black", prijs: 30.95, unit: "meter" },
+      blauw:     { id: "ID_PVC_BLAUW",     naam: "Serge Ferrari 705 — Navy Blue", prijs: 30.95, unit: "meter" },
+      groen:     { id: "ID_PVC_GROEN",     naam: "Serge Ferrari 705 — Donkergroen", prijs: 30.95, unit: "meter" },
+      ecru:      { id: "ID_PVC_ECRU",      naam: "Serge Ferrari 705 — Ecru", prijs: 30.95, unit: "meter" }
+    },
+    lijm: {
+      pot250: { id: "ID_SABA_250", naam: "Saba lijm — 250 ml met kwast", prijs: 11.75, unit: "stuk" },
+      bus1l:  { id: "ID_SABA_1L",  naam: "Saba lijm — 1 liter", prijs: 34.95, unit: "stuk" }
+    },
+    cleaner:   { id: "ID_SABA_CLEAN", naam: "Saba reiniger/ontvetter — 1 liter", prijs: 20.95, unit: "stuk" },
+    loxx:      { id: "ID_LOXX_SET",  naam: "Loxx snelsluiting — set", prijs: 27.90, unit: "set" },
+    stansblok: { id: "ID_STANSBLOK", naam: "Nylon stansblok (slagonderlegger)", prijs: 26.99, unit: "stuk" },
+    shockcord: { id: "ID_SHOCKCORD", naam: "Shockcord 6 mm — zwart", prijs: 0.83, unit: "meter" },
+    uv:        { id: "ID_303_UV",    naam: "303 UV-beschermer — 473 ml", prijs: 21.95, unit: "stuk" }
   };
-  var C = { doekbreedte_cm:270, rokhoogte_cm:20, zoom_marge:1.15, naadbreedte_cm:4,
-            lijm_g_per_m2:350, pot250_g_max:250, loxx_per_cm:60 };
+
+  /* Rekenconstanten — finetune hier zonder de logica te raken */
+  var REKEN = {
+    rokhoogte_cm: 20,
+    zoom_marge: 1.15,
+    naadbreedte_cm: 4,
+    lijm_g_per_m2: 350,
+    pot250_g_max: 250,
+    loxx_per_cm: 60
+  };
+
   var DOEKEN = [
-    { key:"antraciet", naam:"Antraciet / Grijs",   hex:"#4a4d4f" },
-    { key:"zwart",     naam:"Jet Black (Zwart)",   hex:"#1f2024" },
-    { key:"blauw",     naam:"Navy Blue",           hex:"#1b2a4a" },
-    { key:"groen",     naam:"Donkergroen",         hex:"#2f4034" },
-    { key:"ecru",      naam:"Ecru / Hennep",       hex:"#e4ddc7" }
+    { key: "antraciet", naam: "Antraciet / Grijs", hex: "#4a4d4f" },
+    { key: "zwart",     naam: "Jet Black (Zwart)", hex: "#1f2024" },
+    { key: "blauw",     naam: "Navy Blue",         hex: "#1b2a4a" },
+    { key: "groen",     naam: "Donkergroen",       hex: "#2f4034" },
+    { key: "ecru",      naam: "Ecru / Hennep",     hex: "#e4ddc7" }
   ];
-  /* ==================================================================== */
 
-  /* ---- huisstijl-tokens (afgeleid van Bootkap-screenshots) ---- */
-  var CSS = [
-    "@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');",
-    "#ej-mount{",
-    "  --bg:#ffffff; --surface:#ffffff; --panel:#fafafa;",
-    "  --ink:#1c1d1f; --ink-soft:#6b6f76; --ink-mute:#9aa0a6;",
-    "  --line:#e7e9ec; --line-soft:#f0f1f3;",
-    "  --navy:#101830; --navy-d:#0a1020;",            /* donkermarine = primair accent */
-    "  --sel:#1c1d1f;",                                /* zwarte selectierand */
-    "  --orange:#e07b1a;",                             /* enige kleuraccent (badge) */
-    "  --green:#1f5e3a;",                              /* 'toevoegen' bevestiging */
-    "  --radius:14px; --radius-lg:18px;",
-    "  --shadow:0 1px 2px rgba(20,25,40,.04);",
-    "  --shadow-card:0 2px 14px -6px rgba(20,25,40,.12);",
-    "  --ease:cubic-bezier(.4,0,.2,1);",
-    "  font-family:'Inter',-apple-system,sans-serif; color:var(--ink); background:var(--bg);",
-    "  max-width:1180px; margin:0 auto; -webkit-font-smoothing:antialiased; line-height:1.5;",
-    "}",
-    "#ej-mount *{box-sizing:border-box; margin:0;}",
-    "#ej-mount h1,#ej-mount h2,#ej-mount h3{font-family:'Fraunces',serif; font-weight:500; letter-spacing:-.01em;}",
+  var TOTAL_INPUT_STEPS = 5;
+  var RESULT_STEP = 6;
 
-    /* outer card — exact Bootkap: gecentreerde witte kaart met dunne rand */
-    ".ej-shell{border:1px solid var(--line); border-radius:22px; padding:clamp(36px,5vw,72px) clamp(28px,5vw,80px); box-shadow:var(--shadow-card); background:var(--surface);}",
-
-    /* header */
-    ".ej-head{text-align:center; margin-bottom:56px;}",
-    ".ej-head h1{font-size:clamp(1.7rem,3.4vw,2.3rem); line-height:1.1;}",
-    ".ej-head p{color:var(--ink-soft); margin-top:16px; font-size:1rem;}",
-
-    /* progress bar (Bootkap-stijl: dunne lijn die vult, label eronder) */
-    ".ej-prog{max-width:440px; margin:40px auto 0;}",
-    ".ej-prog-track{height:3px; border-radius:3px; background:var(--line); overflow:hidden;}",
-    ".ej-prog-fill{height:100%; background:var(--navy); border-radius:3px; transition:width .55s var(--ease);}",
-    ".ej-prog-label{margin-top:20px; text-align:center; font-size:.72rem; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-mute); font-weight:600;}",
-
-    /* PREVIEW BOVENIN — volle breedte, prominent */
-    ".ej-stage{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); padding:clamp(32px,4vw,48px) clamp(24px,4vw,40px); margin-bottom:48px;}",
-    ".ej-stage-label{font-size:.68rem; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-mute); font-weight:600; text-align:center;}",
-    ".ej-stage-title{font-family:'Fraunces',serif; font-size:1.25rem; text-align:center; margin-top:8px; margin-bottom:34px; color:var(--ink);}",
-    ".ej-stage-inner{display:flex; flex-direction:column; align-items:center; gap:38px;}",
-    ".ej-viz{display:flex; align-items:center; justify-content:center; width:100%;}",
-    ".ej-readout{display:flex; gap:16px; width:100%; max-width:520px;}",
-    ".ej-chip{flex:1; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px 12px; text-align:center;}",
-    ".ej-chip small{font-size:.72rem; color:var(--ink-mute); letter-spacing:.02em; display:block;}",
-    ".ej-chip b{display:block; font-family:'Fraunces',serif; font-size:1.3rem; margin-top:8px; font-weight:500;}",
-
-    /* panel + steps — nu volle breedte onder de preview */
-    ".ej-panel{min-height:300px; max-width:760px; margin:0 auto;}",
-    ".ej-step{display:none; animation:ejIn .45s var(--ease);}",
-    ".ej-step.on{display:block;}",
-    "@keyframes ejIn{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:none;}}",
-    ".ej-q{font-size:1.5rem; margin-bottom:12px; text-align:center;}",
-    ".ej-hint{color:var(--ink-soft); font-size:.95rem; margin-bottom:40px; line-height:1.55; text-align:center; max-width:560px; margin-left:auto; margin-right:auto;}",
-
-    /* selection cards — Bootkap: witte kaart, zwarte rand bij selectie */
-    ".ej-cards{display:grid; gap:16px;}",
-    ".ej-cards.two{grid-template-columns:1fr 1fr;}",
-    "@media(max-width:520px){.ej-cards.two{grid-template-columns:1fr;}}",
-    ".ej-card{background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius); padding:26px; cursor:pointer; transition:.2s var(--ease); position:relative; text-align:left;}",
-    ".ej-card:hover{border-color:var(--ink-mute);}",
-    ".ej-card.sel{border-color:var(--sel); border-width:2px; padding:25.5px; box-shadow:0 0 0 1px var(--sel);}",
-    ".ej-card .ej-ic{width:38px; height:38px; margin-bottom:18px; color:var(--navy);}",
-    ".ej-card .ej-ic svg{width:100%; height:100%; stroke:currentColor; fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round;}",
-    ".ej-card b{display:block; font-size:1rem; font-weight:600; color:var(--ink);}",
-    ".ej-card span{display:block; color:var(--ink-soft); font-size:.86rem; margin-top:8px; line-height:1.5;}",
-    ".ej-badge{display:inline-block; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; font-weight:700; padding:5px 9px; border-radius:6px; margin-bottom:14px;}",
-    ".ej-badge.navy{background:var(--navy); color:#fff;}",
-    ".ej-badge.orange{background:var(--orange); color:#fff;}",
-
-    /* dimension inputs */
-    ".ej-fields{display:grid; grid-template-columns:1fr 1fr; gap:16px;}",
-    ".ej-inp{background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius); padding:16px 18px; transition:.18s;}",
-    ".ej-inp:focus-within{border-color:var(--navy);}",
-    ".ej-inp label{display:block; font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); font-weight:600;}",
-    ".ej-inp input{width:100%; border:none; background:none; font-size:1.4rem; font-family:'Fraunces',serif; color:var(--ink); outline:none; margin-top:6px;}",
-    ".ej-inp input::-webkit-outer-spin-button,.ej-inp input::-webkit-inner-spin-button{-webkit-appearance:none;}",
-    ".ej-radiushelp{grid-column:1/-1; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; font-size:.86rem; color:var(--ink-soft); line-height:1.6; margin-top:4px;}",
-    ".ej-radiushelp b{color:var(--ink);}",
-
-    /* colour swatches — Bootkap kleurstap-stijl: kaart met cirkel + naam */
-    ".ej-swatches{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px;}",
-    ".ej-sw{background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius); padding:24px 14px; cursor:pointer; transition:.2s var(--ease); text-align:center;}",
-    ".ej-sw:hover{border-color:var(--ink-mute);}",
-    ".ej-sw.sel{border-color:var(--sel); border-width:2px; padding:23.5px 13.5px; box-shadow:0 0 0 1px var(--sel);}",
-    ".ej-sw .dot{width:52px; height:52px; border-radius:50%; margin:0 auto 14px; border:1px solid rgba(0,0,0,.08); box-shadow:inset 0 -2px 5px rgba(0,0,0,.12);}",
-    ".ej-sw small{font-size:.84rem; font-weight:500; color:var(--ink);}",
-
-    /* sub-option highlight box (zoals 'Bijpassend garen' bij Bootkap) */
-    ".ej-addon{display:flex; align-items:center; justify-content:space-between; gap:18px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; margin-top:28px;}",
-    ".ej-addon-txt b{font-size:.95rem; font-weight:600;}",
-    ".ej-addon-txt span{display:block; color:var(--ink-soft); font-size:.84rem; margin-top:3px;}",
-    ".ej-addon-btn{flex:none; border:none; border-radius:10px; padding:11px 18px; font-family:'Inter'; font-size:.85rem; font-weight:600; cursor:pointer; transition:.2s; background:var(--green); color:#fff; white-space:nowrap;}",
-    ".ej-addon-btn.off{background:var(--surface); color:var(--ink-soft); border:1.5px solid var(--line);}",
-    ".ej-addon-btn .ck{margin-right:6px;}",
-
-    /* nav */
-    ".ej-nav{display:flex; justify-content:space-between; align-items:center; margin-top:44px; padding-top:28px; border-top:1px solid var(--line-soft); gap:14px;}",
-    ".ej-btn{border:none; border-radius:12px; padding:15px 30px; font-family:'Inter'; font-size:.95rem; font-weight:600; cursor:pointer; transition:.2s var(--ease);}",
-    ".ej-btn.prev{background:var(--surface); border:1.5px solid var(--line); color:var(--ink);}",
-    ".ej-btn.prev:hover{border-color:var(--ink-mute);}",
-    ".ej-btn.next{background:var(--navy); color:#fff;}",
-    ".ej-btn.next:hover{background:var(--navy-d);}",
-    ".ej-btn.next:disabled{background:#c7cad0; cursor:not-allowed;}",
-
-    /* BOM result */
-    ".ej-bom{border:1px solid var(--line); border-radius:var(--radius-lg); overflow:hidden;}",
-    ".ej-bom-row{display:grid; grid-template-columns:1fr auto auto; gap:20px; align-items:center; padding:22px 24px; border-bottom:1px solid var(--line-soft); transition:.2s;}",
-    ".ej-bom-row:last-of-type{border-bottom:none;}",
-    ".ej-bom-row.off{opacity:.4;}",
-    ".ej-bom-name b{font-weight:600; font-size:.95rem;}",
-    ".ej-bom-name span{display:block; color:var(--ink-soft); font-size:.8rem; margin-top:3px;}",
-    ".ej-bom-name .relink{display:inline-block; margin-top:6px; font-size:.74rem; color:var(--navy); cursor:pointer; text-decoration:none; border:none; background:none; padding:0;}",
-    ".ej-bom-name .relink:hover{text-decoration:underline;}",
-    /* stepper */
-    ".ej-step-ctrl{display:flex; align-items:center; gap:0; border:1.5px solid var(--line); border-radius:10px; overflow:hidden;}",
-    ".ej-step-ctrl button{width:34px; height:34px; border:none; background:var(--surface); color:var(--ink); font-size:1.1rem; line-height:1; cursor:pointer; transition:.15s; display:flex; align-items:center; justify-content:center;}",
-    ".ej-step-ctrl button:hover{background:var(--panel);}",
-    ".ej-step-ctrl button:disabled{color:var(--ink-mute); cursor:not-allowed;}",
-    ".ej-step-ctrl .val{min-width:48px; text-align:center; font-size:.9rem; font-weight:500; font-variant-numeric:tabular-nums; border-left:1.5px solid var(--line); border-right:1.5px solid var(--line); height:34px; display:flex; align-items:center; justify-content:center; padding:0 4px;}",
-    ".ej-bom-price{font-family:'Fraunces',serif; font-size:1.1rem; white-space:nowrap; font-variant-numeric:tabular-nums; min-width:78px; text-align:right;}",
-    ".ej-bom-foot{display:flex; justify-content:space-between; align-items:center; padding:24px; background:var(--panel);}",
-    ".ej-bom-foot .lbl{font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft);}",
-    ".ej-bom-foot .tot{font-family:'Fraunces',serif; font-size:1.9rem; font-weight:500;}",
-    ".ej-cta{width:100%; background:var(--navy); color:#fff; border:none; border-radius:12px; padding:20px; font-family:'Inter'; font-size:1.05rem; font-weight:700; cursor:pointer; margin-top:28px; transition:.2s var(--ease);}",
-    ".ej-cta:hover{background:var(--navy-d);}",
-    ".ej-restart{display:block; margin:28px auto 0; background:none; border:none; color:var(--ink-soft); font-size:.85rem; cursor:pointer; text-decoration:underline;}"
-  ].join("\n");
-
-  /* ---- state ---- */
-  var S = { step:0, type:null, L:200, B:200, R:30, doek:"antraciet",
-            verwerking:null, bevestiging:null, onderhoud:[] };
-  var BOM = null;   /* vastgehouden materiaallijst zodra stap 6 bereikt is */
-  var STEPS = ["Project","Afmetingen","Kleurstelling","Verwerking","Bevestiging","Klaar"];
-  var mount;
-  function euro(n){ return "\u20ac\u00a0"+n.toFixed(2).replace(".",","); }
-  function ic(p){ return "<svg viewBox='0 0 24 24'><path d='"+p+"'/></svg>"; }
-  var ICONS = {
-    herbekleden:"M3 7l9-4 9 4-9 4-9-4zm0 5l9 4 9-4M3 17l9 4 9-4",
-    nieuw:"M12 3v18M3 12h18",
-    lijmen:"M4 7h16v4a6 6 0 01-12 0M9 7V4h6v3",
-    stikken:"M4 12h16M7 8l-3 4 3 4M17 8l3 4-3 4",
-    loxx:"M12 2a5 5 0 015 5v3H7V7a5 5 0 015-5zM5 10h14v11H5z",
-    shockcord:"M4 12c4-6 12-6 16 0M4 12c4 6 12 6 16 0"
-  };
-
-  /* ---- rekenmodule ---- */
-  function bereken(){
-    var L=S.L, B=S.B, R=S.R, PI=Math.PI;
-    var A_dek=((L*B)-(4*R*R)+(PI*R*R))/10000;
-    var omtrek=2*(L+B)-8*R+2*PI*R;
-    var A_rok=(omtrek*C.rokhoogte_cm)/10000;
-    var pvc=((A_dek+A_rok)*C.zoom_marge)/(C.doekbreedte_cm/100); pvc=Math.ceil(pvc*2)/2;
-    var lijm_g=((omtrek*2*C.naadbreedte_cm)/10000)*C.lijm_g_per_m2;
-    var loxx=Math.max(4, 2*Math.ceil(L/C.loxx_per_cm)+2*Math.ceil(B/C.loxx_per_cm)-4);
-    var shock=Math.ceil((omtrek/100)*1.1);
-    return {A_dek:A_dek, omtrek:omtrek, pvc:pvc, lijm_g:lijm_g, loxx:loxx, shock:shock};
-  }
-  function adviesBOM(){
-    var r=bereken(), it=[];
-    function add(key,p,q,aan){ it.push({key:key,id:p.id,naam:p.naam,sub:p.sub,eenheid:p.eenheid,prijs:p.prijs,adv:q,qty:aan?q:0,locked:false}); }
-    add("pvc",P.pvc, r.pvc, true);
-    if(S.verwerking==="lijmen"){ if(r.lijm_g<=C.pot250_g_max) add("lijm",P.lijm250,1,true); else add("lijm",P.lijm1l,Math.ceil(r.lijm_g/1000),true); }
-    if(S.bevestiging==="loxx"){ add("loxx",P.loxx,r.loxx,true); add("stans",P.stansblok,1,true); }
-    else if(S.bevestiging==="shockcord"){ add("shock",P.shockcord,r.shock,true); }
-    if(S.onderhoud.indexOf("cleaner")>=0) add("cleaner",P.cleaner,1,false);
-    if(S.onderhoud.indexOf("uv")>=0) add("uv",P.uv,1,false);
-    return it;
-  }
-  /* synct adviesaantallen in de bestaande BOM zonder handmatige (locked) regels te overschrijven */
-  function syncBOM(){
-    var nieuw=adviesBOM();
-    if(!BOM){ BOM=nieuw; return; }
-    var oud={}; BOM.forEach(function(x){ oud[x.key]=x; });
-    BOM = nieuw.map(function(n){
-      var o=oud[n.key];
-      if(o && o.locked){ n.qty=o.qty; n.locked=true; }   /* handmatig vastgezet: behoud */
-      return n;
-    });
-  }
-
-  /* ---- live cover-visualisatie ---- */
-  function coverSVG(){
-    var L=S.L, B=S.B, R=S.R, max=Math.max(L,B,1), scale=150/max;
-    var w=L*scale, h=B*scale, r=Math.min(R*scale, w/2, h/2);
-    var cx=110-w/2, cy=110-h/2;
-    var d=DOEKEN.filter(function(x){return x.key===S.doek;})[0]||DOEKEN[0];
-    var hex=d.hex;
-    return "<svg viewBox='0 0 220 220' style='width:100%;max-width:340px;'>"+
-      "<defs>"+
-        "<linearGradient id='ejTop' x1='0' y1='0' x2='1' y2='1'>"+
-          "<stop offset='0' stop-color='"+hex+"'/>"+
-          "<stop offset='1' stop-color='"+hex+"' stop-opacity='.85'/>"+
-        "</linearGradient>"+
-        "<filter id='ejSh' x='-25%' y='-25%' width='150%' height='150%'>"+
-          "<feDropShadow dx='0' dy='7' stdDeviation='8' flood-color='#0a1020' flood-opacity='.18'/>"+
-        "</filter>"+
-      "</defs>"+
-      "<ellipse cx='110' cy='"+(cy+h+15)+"' rx='"+(w/2*.9)+"' ry='9' fill='#000' opacity='.06'/>"+
-      "<rect x='"+cx+"' y='"+cy+"' width='"+w+"' height='"+h+"' rx='"+r+"' ry='"+r+"' fill='url(#ejTop)' filter='url(#ejSh)' style='transition:all .45s cubic-bezier(.4,0,.2,1);'/>"+
-      "<rect x='"+(cx+6)+"' y='"+(cy+6)+"' width='"+Math.max(w-12,2)+"' height='"+Math.max(h-12,2)+"' rx='"+Math.max(r-5,0)+"' fill='none' stroke='#fff' stroke-opacity='.13' stroke-width='1.5' style='transition:all .45s cubic-bezier(.4,0,.2,1);'/>"+
-      "<line x1='110' y1='"+(cy+5)+"' x2='110' y2='"+(cy+h-5)+"' stroke='#fff' stroke-opacity='.09' stroke-width='1'/>"+
-    "</svg>";
-  }
-  function renderStage(){
-    var r=bereken();
-    var body=mount.querySelector("#ej-stage-body");
-    if(!body) return;
-    body.innerHTML = coverSVG();
-    var ro=mount.querySelector("#ej-readout");
-    if(ro) ro.innerHTML =
-      "<div class='ej-chip'><small>Dek-oppervlak</small><b>"+r.A_dek.toFixed(2)+" m\u00b2</b></div>"+
-      "<div class='ej-chip'><small>PVC nodig</small><b>"+r.pvc.toFixed(1)+" m</b></div>"+
-      "<div class='ej-chip'><small>Omtrek</small><b>"+(r.omtrek/100).toFixed(2)+" m</b></div>";
-  }
-
-  /* ---- card helper: bepaalt zelf de selectie-staat per groep ---- */
-  function isSel(group,val){
-    if(group==="type") return S.type===val;
-    if(group==="verwerking") return S.verwerking===val;
-    if(group==="bevestiging") return S.bevestiging===val;
-    if(group==="ond") return S.onderhoud.indexOf(val)>=0;
-    return false;
-  }
-  function card(group,val,title,sub,icon,badge){
-    var sel = isSel(group,val);
-    var b = badge ? "<span class='ej-badge "+badge.cls+"'>"+badge.txt+"</span>" : "";
-    return "<div class='ej-card"+(sel?" sel":"")+"' data-group='"+group+"' data-val='"+val+"'>"+
-      b+"<div class='ej-ic'>"+ic(icon)+"</div>"+
-      "<b>"+title+"</b><span>"+sub+"</span></div>";
-  }
-  function field(k,label,val){
-    return "<div class='ej-inp'><label>"+label+"</label>"+
-      "<input type='number' inputmode='numeric' data-dim='"+k+"' value='"+(val||"")+"' placeholder='0'></div>";
-  }
-
-  /* ---- render ---- */
-  function render(){
-    var pct = (S.step/(STEPS.length-1))*100;
-    mount.innerHTML =
-      "<div class='ej-shell'>"+
-        "<div class='ej-head'>"+
-          "<h1>Jacuzzi-Afdekzeil Keuzehulp</h1>"+
-          "<p>Stel in een paar stappen jouw ideale materiaalpakket samen</p>"+
-          "<div class='ej-prog'><div class='ej-prog-track'><div class='ej-prog-fill' style='width:"+pct+"%'></div></div>"+
-          "<div class='ej-prog-label'>Stap "+(S.step+1)+" van "+STEPS.length+": "+STEPS[S.step]+"</div></div>"+
-        "</div>"+
-        "<div class='ej-stage'>"+
-          "<div class='ej-stage-label'>Live preview</div>"+
-          "<div class='ej-stage-title' id='ej-stage-title'>Jouw cover</div>"+
-          "<div class='ej-stage-inner'>"+
-            "<div class='ej-viz' id='ej-stage-body'></div>"+
-            "<div class='ej-readout' id='ej-readout'></div>"+
-          "</div>"+
-        "</div>"+
-        "<div class='ej-panel' id='ej-panel'></div>"+
-      "</div>";
-
-    renderStage();
-    var panel=mount.querySelector("#ej-panel");
-    var title=mount.querySelector("#ej-stage-title");
-
-    if(S.step===0){
-      title.textContent="Jouw project";
-      panel.innerHTML=wrap("Wat ga je doen?","Hergebruik je de bestaande schuimkern, of maak je een losse beschermhoes?",
-        "<div class='ej-cards two'>"+
-          card("type","herbekleden","Herbekleden","Oude cover redden en de schuimkern hergebruiken.",ICONS.herbekleden)+
-          card("type","nieuw","Nieuwe beschermhoes","Een losse over-hoes maken ter bescherming.",ICONS.nieuw)+
-        "</div>", S.type!=null);
-    }
-    else if(S.step===1){
-      title.textContent="Afmetingen";
-      panel.innerHTML=wrap("Maten van je jacuzzi","Voer de maten in centimeters in. De preview links beweegt direct mee.",
-        "<div class='ej-fields'>"+
-          field("L","Lengte (cm)",S.L)+field("B","Breedte (cm)",S.B)+field("R","Hoekradius (cm)",S.R)+
-          "<div class='ej-inp' style='display:flex;align-items:center;justify-content:center;background:var(--panel);border-style:dashed;'>"+
-            "<span style='font-size:.82rem;color:var(--ink-soft);text-align:center;'>De radius bepaalt<br>de ronding \u2196</span></div>"+
-          "<div class='ej-radiushelp'><b>Radius meten:</b> leg twee rechte latten haaks tegen de zijkanten van de jacuzzi. De afstand van hun virtuele kruispunt tot waar de rand begint te buigen, is je hoekradius.</div>"+
-        "</div>", true);
-    }
-    else if(S.step===2){
-      title.textContent="Doekkleur";
-      var sw=""; DOEKEN.forEach(function(d){
-        sw+="<div class='ej-sw"+(S.doek===d.key?" sel":"")+"' data-doek='"+d.key+"'>"+
-          "<div class='dot' style='background:"+d.hex+"'></div><small>"+d.naam+"</small></div>";
-      });
-      panel.innerHTML=wrap("Kies de gewenste kleur","Serge Ferrari 705 in mat. De preview toont je keuze direct. Alle kleuren zijn even sterk.",
-        "<div class='ej-swatches'>"+sw+"</div>", true);
-    }
-    else if(S.step===3){
-      title.textContent="Verwerking";
-      panel.innerHTML=wrap("Kies de verwerkingswijze","Koudlassen met Saba 70T is 100% waterdicht en vereist geen naaimachine.",
-        "<div class='ej-cards two'>"+
-          card("verwerking","lijmen","Koudlassen (Saba 70T)","Waterdicht, geen naaimachine nodig.",ICONS.lijmen,{cls:"navy",txt:"Aanbevolen"})+
-          card("verwerking","stikken","Stikken","Met een jeansnaald op een normale naaimachine.",ICONS.stikken)+
-        "</div>", S.verwerking!=null);
-    }
-    else if(S.step===4){
-      title.textContent="Windverankering";
-      panel.innerHTML=wrap("Hoe veranker je de cover?","Voorkom dat de cover bij wind losraakt.",
-        "<div class='ej-cards two'>"+
-          card("bevestiging","loxx","Loxx Quick-Release","Snelkoppelingen die nooit uit zichzelf loswaaien.",ICONS.loxx)+
-          card("bevestiging","shockcord","Zeilringen + shockcord","Elastisch koord om de hoes strak op te spannen.",ICONS.shockcord)+
-        "</div>"+
-        "<div class='ej-addon'><div class='ej-addon-txt'><b>Saba Clean 21 toevoegen?</b><span>Ontvet het PVC voor maximale lijmhechting. Aanbevolen bij koudlassen.</span></div>"+
-          "<button class='ej-addon-btn"+(S.onderhoud.indexOf("cleaner")>=0?"":" off")+"' data-addon='cleaner'>"+(S.onderhoud.indexOf("cleaner")>=0?"<span class='ck'>\u2713</span>Toegevoegd":"Toevoegen")+"</button></div>"+
-        "<div class='ej-addon'><div class='ej-addon-txt'><b>303 Protectant toevoegen?</b><span>UV-blocker die de levensduur verlengt en vuil afstoot.</span></div>"+
-          "<button class='ej-addon-btn"+(S.onderhoud.indexOf("uv")>=0?"":" off")+"' data-addon='uv'>"+(S.onderhoud.indexOf("uv")>=0?"<span class='ck'>\u2713</span>Toegevoegd":"Toevoegen")+"</button></div>",
-        S.bevestiging!=null);
-    }
-    else if(S.step===5){ renderResult(panel,title); return; }
-
-    bind();
-  }
-
-  function wrap(q,hint,body,canNext){
-    var nextLabel = (S.step===4) ? "Bekijk pakket \u2192" : "Volgende \u2192";
-    return "<div class='ej-step on'>"+
-      "<h2 class='ej-q'>"+q+"</h2><p class='ej-hint'>"+hint+"</p>"+body+
-      "<div class='ej-nav'>"+
-        (S.step>0 ? "<button class='ej-btn prev' data-prev>Vorige</button>" : "<span></span>")+
-        "<button class='ej-btn next' data-next"+(canNext?"":" disabled")+">"+nextLabel+"</button>"+
-      "</div></div>";
-  }
-
-  /* ---- result / BOM met bewerkbare aantallen ---- */
-  function renderResult(panel,title){
-    title.textContent="Compleet pakket";
-    syncBOM();
-    drawBOM(panel);
-  }
-  function bomTotaal(){ var t=0; BOM.forEach(function(x){ t+=x.prijs*x.qty; }); return t; }
-  function drawBOM(panel){
-    var rows="";
-    BOM.forEach(function(it,i){
-      var actief=it.qty>0;
-      var relink = it.locked ? "<button class='relink' data-relink='"+i+"'>\u21ba Terug naar advies ("+it.adv+")</button>" : "";
-      rows+="<div class='ej-bom-row"+(actief?"":" off")+"'>"+
-        "<div class='ej-bom-name'><b>"+it.naam+"</b><span>"+it.sub+" \u00b7 "+euro(it.prijs)+" / "+it.eenheid+"</span>"+relink+"</div>"+
-        "<div class='ej-step-ctrl'>"+
-          "<button data-dec='"+i+"' "+(it.qty<=0?"disabled":"")+">\u2212</button>"+
-          "<span class='val'>"+it.qty+" "+it.eenheid+"</span>"+
-          "<button data-inc='"+i+"'>+</button>"+
-        "</div>"+
-        "<div class='ej-bom-price'>"+euro(it.prijs*it.qty)+"</div></div>";
-    });
-    panel.innerHTML="<div class='ej-step on'>"+
-      "<h2 class='ej-q'>Jouw materiaallijst</h2>"+
-      "<p class='ej-hint'>Op maat berekend voor "+S.L+"\u00d7"+S.B+" cm, hoekradius "+S.R+" cm. Pas de aantallen vrij aan met + en \u2212.</p>"+
-      "<div class='ej-bom'>"+rows+
-        "<div class='ej-bom-foot'><span class='lbl'>Totaal incl. btw</span><span class='tot'>"+euro(bomTotaal())+"</span></div></div>"+
-      "<button class='ej-cta' id='ej-cta'>Voeg complete set toe aan winkelwagen</button>"+
-      "<button class='ej-restart' data-restart>Opnieuw beginnen</button>"+
-    "</div>";
-
-    function stap(i,delta){
-      var it=BOM[i];
-      var stapgrootte = (it.eenheid==="m") ? 0.5 : 1;   /* PVC/shockcord per halve meter, rest per stuk */
-      var nieuw = Math.max(0, Math.round((it.qty+delta*stapgrootte)*2)/2);
-      it.qty = nieuw; it.locked = true;                 /* handmatig = vergrendeld */
-      drawBOM(panel);
-    }
-    panel.querySelectorAll("[data-inc]").forEach(function(b){ b.onclick=function(){ stap(+b.dataset.inc, 1); }; });
-    panel.querySelectorAll("[data-dec]").forEach(function(b){ b.onclick=function(){ stap(+b.dataset.dec,-1); }; });
-    panel.querySelectorAll("[data-relink]").forEach(function(b){ b.onclick=function(){
-      var it=BOM[+b.dataset.relink]; it.qty=it.adv; it.locked=false; drawBOM(panel);
-    }; });
-    panel.querySelector("#ej-cta").onclick=function(){ addToCart(BOM); };
-    panel.querySelector("[data-restart]").onclick=function(){ BOM=null; S.step=0; S.verwerking=null; S.bevestiging=null; S.onderhoud=[]; render(); };
-  }
-
-  /* ---- cart: form-POST naar /cart via verborgen iframe (zoals Bootkap) ---- */
-  function addToCart(items){
-    var sel=items.filter(function(i){return i.qty>0;});
-    if(!sel.length){ alert("Voeg minimaal \u00e9\u00e9n product toe."); return; }
-    if(sel.some(function(i){return /^VARIANT_/.test(i.id);})){
-      alert("Nog niet alle product-ID's zijn ingevuld in de CONFIG. Vul de echte Lightspeed-ID's in voordat je live gaat."); return;
-    }
-    var frame=document.getElementById("ej-cartframe");
-    if(!frame){ frame=document.createElement("iframe"); frame.id="ej-cartframe"; frame.name="ej-cartframe"; frame.style.display="none"; document.body.appendChild(frame); }
-    function post(id,qty,target){
-      var f=document.createElement("form"); f.method="POST"; f.action=CART_ACTION; f.target=target;
-      f.innerHTML="<input name='product' value='"+id+"'><input name='quantity' value='"+qty+"'>";
-      document.body.appendChild(f); f.submit(); f.parentNode.removeChild(f);
-    }
-    var i=0;
-    function step(){
-      if(i<sel.length-1){ post(sel[i].id, sel[i].qty, "ej-cartframe"); i++; setTimeout(step,500); }
-      else { post(sel[i].id, sel[i].qty, "_self"); }  // laatste: zichtbaar naar winkelwagen
-    }
-    step();
-  }
-
-  /* ---- events ---- */
-  function bind(){
-    mount.querySelectorAll(".ej-card[data-group]").forEach(function(c){
-      c.onclick=function(){
-        var g=c.dataset.group, v=c.dataset.val;
-        if(g==="type") S.type=v;
-        else if(g==="verwerking") S.verwerking=v;
-        else if(g==="bevestiging") S.bevestiging=v;
-        render();
-      };
-    });
-    mount.querySelectorAll(".ej-sw[data-doek]").forEach(function(s){
-      s.onclick=function(){ S.doek=s.dataset.doek; render(); };
-    });
-    mount.querySelectorAll("[data-addon]").forEach(function(b){
-      b.onclick=function(){
-        var v=b.dataset.addon, idx=S.onderhoud.indexOf(v);
-        if(idx>=0) S.onderhoud.splice(idx,1); else S.onderhoud.push(v);
-        render();
-      };
-    });
-    mount.querySelectorAll("input[data-dim]").forEach(function(inp){
-      inp.oninput=function(){ S[inp.dataset.dim]=+inp.value||0; renderStage(); };
-    });
-    var nx=mount.querySelector("[data-next]");
-    if(nx) nx.onclick=function(){
-      if(S.step===1 && (!S.L||!S.B)){ alert("Vul lengte en breedte in."); return; }
-      S.step++; render();
+  /* -------------------- STATE -------------------- */
+  var state;
+  function resetState() {
+    state = {
+      currentStep: 1,
+      project: null,         // 'herbekleden' | 'nieuw'
+      lengte: 200,           // cm
+      breedte: 200,          // cm
+      radius: 30,            // cm
+      kleur: "antraciet",
+      verwerking: null,      // 'lijmen' | 'stikken'
+      bevestiging: null,     // 'loxx' | 'shockcord'
+      wil_cleaner: false,
+      wil_uv: false,
+      bundle: {}
     };
-    var pv=mount.querySelector("[data-prev]");
-    if(pv) pv.onclick=function(){ S.step--; render(); };
   }
 
-  /* ---- init ---- */
-  function init(){
-    mount=document.getElementById("ej-mount");
-    if(!mount || mount.getAttribute("data-ej-init")==="1"){ return; }
-    mount.setAttribute("data-ej-init","1");
-    var style=document.createElement("style"); style.textContent=CSS; document.head.appendChild(style);
-    render();
+  /* -------------------- HELPERS -------------------- */
+  var root;
+  function $(id) { return document.getElementById(id); }
+  function money(n) { return n.toFixed(2).replace('.', ','); }
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  /* -------------------- REKENMODULE -------------------- */
+  function bereken() {
+    var L = state.lengte, B = state.breedte, R = state.radius, PI = Math.PI;
+    var A_dek = ((L * B) - (4 * R * R) + (PI * R * R)) / 10000;       // m²
+    var omtrek = 2 * (L + B) - 8 * R + 2 * PI * R;                    // cm
+    var A_rok = (omtrek * REKEN.rokhoogte_cm) / 10000;               // m²
+    var pvc = ((A_dek + A_rok) * REKEN.zoom_marge) / (DOEK_BREEDTE_CM / 100);
+    pvc = Math.ceil(pvc * 2) / 2;                                     // halve meter
+    var lijm_g = ((omtrek * 2 * REKEN.naadbreedte_cm) / 10000) * REKEN.lijm_g_per_m2;
+    var loxx = Math.max(4, 2 * Math.ceil(L / REKEN.loxx_per_cm) + 2 * Math.ceil(B / REKEN.loxx_per_cm) - 4);
+    var shock = Math.ceil((omtrek / 100) * 1.1);
+    return { A_dek: A_dek, omtrek: omtrek, pvc: pvc, lijm_g: lijm_g, loxx: loxx, shock: shock };
   }
-  if(document.readyState==="loading"){
-    document.addEventListener("DOMContentLoaded", init);
-    window.addEventListener("load", init);   // vangnet als DOMContentLoaded gemist wordt
+
+  /* -------------------- HTML-TEMPLATE -------------------- */
+  function wizardHTML() {
+    return '' +
+    '<div class="esails-wizard-header">' +
+      '<h2>Jacuzzi-Afdekzeil Keuzehulp</h2>' +
+      '<p>Stel in een paar stappen jouw ideale materiaalpakket samen</p>' +
+      '<div class="esails-progress-wrapper"><div class="esails-progress-bar" id="ejProgressBar" style="width:20%;"></div></div>' +
+      '<div class="esails-step-indicator" id="ejStepIndicator">Stap 1 van 5: Project</div>' +
+    '</div>' +
+
+    /* LIVE PREVIEW — boven de stappen, volle breedte */
+    '<div class="esails-preview" id="ejPreview">' +
+      '<div class="esails-preview-label">Live preview</div>' +
+      '<div class="esails-preview-canvas" id="ejPreviewCanvas"></div>' +
+      '<div class="esails-preview-stats" id="ejPreviewStats"></div>' +
+    '</div>' +
+
+    /* STAP 1 — Project */
+    '<div class="esails-wizard-step active" data-step="1">' +
+      '<h3>Wat ga je doen?</h3>' +
+      '<p class="esails-step-subtitle">Hergebruik je de bestaande schuimkern, of maak je een losse beschermhoes?</p>' +
+      '<div class="esails-card-grid esails-grid-2">' +
+        card('project','herbekleden','♻️','Herbekleden','Je oude cover redden en de schuimkern hergebruiken.') +
+        card('project','nieuw','✨','Nieuwe beschermhoes','Een losse over-hoes maken ter bescherming van de jacuzzi.') +
+      '</div>' +
+    '</div>' +
+
+    /* STAP 2 — Afmetingen */
+    '<div class="esails-wizard-step" data-step="2">' +
+      '<h3>Wat zijn de maten van je jacuzzi?</h3>' +
+      '<p class="esails-step-subtitle">In centimeters. De preview hierboven beweegt direct mee terwijl je sleept.</p>' +
+      sliderHTML('lengte','Lengte','cm',100,400,5) +
+      sliderHTML('breedte','Breedte','cm',100,400,5) +
+      sliderHTML('radius','Hoekradius','cm',0,80,1) +
+      '<p class="esails-help-note"><strong>Hoekradius meten:</strong> leg twee rechte latten haaks tegen de zijkanten. ' +
+        'De afstand van hun kruispunt tot waar de rand begint te buigen, is je radius. Bij een rechthoekige bak is de radius 0.</p>' +
+    '</div>' +
+
+    /* STAP 3 — Kleur */
+    '<div class="esails-wizard-step" data-step="3">' +
+      '<h3>Kies de kleur van het doek</h3>' +
+      '<p class="esails-step-subtitle">Serge Ferrari 705 in mat. De preview toont je keuze direct. Alle kleuren zijn even sterk.</p>' +
+      '<div class="esails-color-grid" id="ejColorGrid">' + kleurKaarten() + '</div>' +
+    '</div>' +
+
+    /* STAP 4 — Verwerking */
+    '<div class="esails-wizard-step" data-step="4">' +
+      '<h3>Hoe wil je het doek verwerken?</h3>' +
+      '<p class="esails-step-subtitle">Lijmen is volledig waterdicht en je hebt er geen naaimachine voor nodig.</p>' +
+      '<div class="esails-card-grid esails-grid-2">' +
+        cardBadge('verwerking','lijmen','🧪','Lijmen (koudlassen)','Naden worden met Saba-lijm waterdicht aan elkaar gezet. Geen naaimachine nodig.','Makkelijkst','navy') +
+        card('verwerking','stikken','🪡','Stikken','Met een jeansnaald op een normale naaimachine. Vraagt wat naai-ervaring.') +
+      '</div>' +
+    '</div>' +
+
+    /* STAP 5 — Bevestiging + onderhoud */
+    '<div class="esails-wizard-step" data-step="5">' +
+      '<h3>Hoe maak je de cover windvast?</h3>' +
+      '<p class="esails-step-subtitle">Voorkom dat de hoes bij wind losraakt.</p>' +
+      '<div class="esails-card-grid esails-grid-2">' +
+        card('bevestiging','loxx','🔘','Loxx snelsluitingen','Zelfborgende druksluitingen die nooit uit zichzelf loswaaien.') +
+        card('bevestiging','shockcord','🔗','Zeilringen + shockcord','Elastisch koord om de hoes strak op te spannen.') +
+      '</div>' +
+      '<div class="esails-garen-keuze">' +
+        '<div class="esails-garen-info"><strong>Saba reiniger/ontvetter toevoegen?</strong>' +
+          '<span>Ontvet het doek vóór het lijmen voor een maximale hechting. Aanbevolen bij lijmen.</span></div>' +
+        '<button type="button" class="esails-pill esails-toggle-off" data-toggle="wil_cleaner" id="ejToggleCleaner">Toevoegen</button>' +
+      '</div>' +
+      '<div class="esails-garen-keuze">' +
+        '<div class="esails-garen-info"><strong>303 UV-beschermer toevoegen?</strong>' +
+          '<span>Verlengt de levensduur van het doek en stoot vuil en water af.</span></div>' +
+        '<button type="button" class="esails-pill esails-toggle-off" data-toggle="wil_uv" id="ejToggleUv">Toevoegen</button>' +
+      '</div>' +
+    '</div>' +
+
+    /* STAP 6 — Resultaat */
+    '<div class="esails-wizard-step" data-step="6">' +
+      '<div class="esails-success-banner">' +
+        '<h3>✓ Jouw materiaallijst is klaar!</h3>' +
+        '<p>Op basis van je keuzes hebben we het pakket op maat berekend. Pas de aantallen vrij aan met de plus- en minknoppen.</p>' +
+      '</div>' +
+      '<div class="esails-configuration-board">' +
+        '<div class="esails-board-header"><span>Onderdeel</span><span style="text-align:right;">Aantal / Prijs</span></div>' +
+        '<div id="ejDynamicLines"></div>' +
+        '<div class="esails-board-footer">' +
+          '<div class="esails-total-price">Totaalprijs pakket: <span id="ejTotalAmount">€ 0,00</span></div>' +
+          '<button type="button" class="esails-btn-submit" id="ejBtnAddToCart">' +
+            '<span class="btn-text">Voeg complete pakket toe aan winkelwagen</span>' +
+            '<div class="esails-loader" style="display:none;"></div>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="esails-wizard-navigation" id="ejNav">' +
+      '<button type="button" class="esails-btn esails-btn-secondary" id="ejBtnPrev" disabled>Vorige</button>' +
+      '<button type="button" class="esails-btn esails-btn-primary" id="ejBtnNext" disabled>Volgende</button>' +
+    '</div>';
+  }
+
+  /* ---------- card-helpers (Bootkap-idioom) ---------- */
+  function card(group, val, icon, titel, oms) {
+    return '<div class="esails-selection-card" data-group="' + group + '" data-value="' + val + '">' +
+      '<span class="esails-badge esails-badge-placeholder">x</span>' +
+      '<div class="esails-card-icon">' + icon + '</div>' +
+      '<h4>' + titel + '</h4><p>' + oms + '</p></div>';
+  }
+  function cardBadge(group, val, icon, titel, oms, badgeText, badgeType) {
+    var badgeCls = (badgeType === 'budget') ? 'esails-badge esails-badge-budget' : 'esails-badge';
+    return '<div class="esails-selection-card" data-group="' + group + '" data-value="' + val + '">' +
+      '<span class="' + badgeCls + '">' + badgeText + '</span>' +
+      '<div class="esails-card-icon">' + icon + '</div>' +
+      '<h4>' + titel + '</h4><p>' + oms + '</p></div>';
+  }
+  function kleurKaarten() {
+    var h = '';
+    for (var i = 0; i < DOEKEN.length; i++) {
+      var d = DOEKEN[i];
+      h += '<div class="esails-color-card" data-group="kleur" data-value="' + d.key + '">' +
+        '<div class="esails-color-swatch" style="background:' + d.hex + ';"></div>' +
+        '<span>' + d.naam + '</span></div>';
+    }
+    return h;
+  }
+  function sliderHTML(key, label, unit, min, max, step) {
+    return '<div class="esails-slider-wrapper">' +
+      '<label>' + label + ': <span id="ejVal_' + key + '">' + state[key] + '</span> ' + unit + '</label>' +
+      '<input type="range" id="ejSlider_' + key + '" data-slider="' + key + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + state[key] + '">' +
+    '</div>';
+  }
+
+  /* -------------------- PREVIEW (live cover) -------------------- */
+  function coverSVG() {
+    var L = state.lengte, B = state.breedte, R = state.radius;
+    var max = Math.max(L, B, 1), sc = 150 / max;
+    var w = L * sc, h = B * sc, r = Math.min(R * sc, w / 2, h / 2);
+    var cx = 110 - w / 2, cy = 110 - h / 2;
+    var d = DOEKEN.filter(function (x) { return x.key === state.kleur; })[0] || DOEKEN[0];
+    var ease = 'transition:all .4s ease;';
+    return '<svg viewBox="0 0 220 220" width="100%" style="max-width:320px;display:block;margin:0 auto;">' +
+      '<defs><filter id="ejShadow" x="-25%" y="-25%" width="150%" height="150%">' +
+      '<feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f1c3f" flood-opacity="0.18"/></filter></defs>' +
+      '<ellipse cx="110" cy="' + (cy + h + 15) + '" rx="' + (w / 2 * 0.9) + '" ry="9" fill="#000" opacity="0.06"/>' +
+      '<rect x="' + cx + '" y="' + cy + '" width="' + w + '" height="' + h + '" rx="' + r + '" ry="' + r + '" fill="' + d.hex + '" filter="url(#ejShadow)" style="' + ease + '"/>' +
+      '<rect x="' + (cx + 6) + '" y="' + (cy + 6) + '" width="' + Math.max(w - 12, 2) + '" height="' + Math.max(h - 12, 2) + '" rx="' + Math.max(r - 5, 0) + '" fill="none" stroke="#fff" stroke-opacity="0.14" stroke-width="1.5" style="' + ease + '"/>' +
+      '<line x1="110" y1="' + (cy + 5) + '" x2="110" y2="' + (cy + h - 5) + '" stroke="#fff" stroke-opacity="0.09" stroke-width="1"/>' +
+    '</svg>';
+  }
+  function renderPreview() {
+    var canvas = $('ejPreviewCanvas'); if (!canvas) return;
+    canvas.innerHTML = coverSVG();
+    var r = bereken();
+    var stats = $('ejPreviewStats');
+    if (stats) stats.innerHTML =
+      '<div class="esails-stat"><small>Dek-oppervlak</small><strong>' + r.A_dek.toFixed(2) + ' m²</strong></div>' +
+      '<div class="esails-stat"><small>Doek nodig</small><strong>' + r.pvc.toFixed(1) + ' m</strong></div>' +
+      '<div class="esails-stat"><small>Omtrek</small><strong>' + (r.omtrek / 100).toFixed(2) + ' m</strong></div>';
+  }
+
+  /* -------------------- BUNDLE (materiaallijst) -------------------- */
+  function bouwBundle() {
+    var r = bereken();
+    var doek = CONFIG.doek[state.kleur] || CONFIG.doek.antraciet;
+    var b = {};
+    b.doek = { id: doek.id, naam: doek.naam, notitie: 'Mat, 270 cm breed · per strekkende meter', prijs: doek.prijs, qty: r.pvc, unit: 'm', step: 0.5 };
+    if (state.verwerking === 'lijmen') {
+      if (r.lijm_g <= REKEN.pot250_g_max) {
+        b.lijm = { id: CONFIG.lijm.pot250.id, naam: CONFIG.lijm.pot250.naam, notitie: 'Voor het waterdicht lijmen van de naden', prijs: CONFIG.lijm.pot250.prijs, qty: 1, unit: 'st', step: 1 };
+      } else {
+        b.lijm = { id: CONFIG.lijm.bus1l.id, naam: CONFIG.lijm.bus1l.naam, notitie: 'Voor het waterdicht lijmen van de naden', prijs: CONFIG.lijm.bus1l.prijs, qty: Math.ceil(r.lijm_g / 1000), unit: 'st', step: 1 };
+      }
+    }
+    if (state.bevestiging === 'loxx') {
+      b.loxx = { id: CONFIG.loxx.id, naam: CONFIG.loxx.naam, notitie: 'Zelfborgende windvaste sluitingen', prijs: CONFIG.loxx.prijs, qty: r.loxx, unit: 'set', step: 1 };
+      b.stansblok = { id: CONFIG.stansblok.id, naam: CONFIG.stansblok.naam, notitie: 'Voor het aanbrengen van de sluitingen', prijs: CONFIG.stansblok.prijs, qty: 1, unit: 'st', step: 1 };
+    } else if (state.bevestiging === 'shockcord') {
+      b.shockcord = { id: CONFIG.shockcord.id, naam: CONFIG.shockcord.naam, notitie: 'Elastisch opspannen langs de onderrand', prijs: CONFIG.shockcord.prijs, qty: r.shock, unit: 'm', step: 1 };
+    }
+    if (state.wil_cleaner) b.cleaner = { id: CONFIG.cleaner.id, naam: CONFIG.cleaner.naam, notitie: 'Ontvet het doek vóór het lijmen', prijs: CONFIG.cleaner.prijs, qty: 1, unit: 'st', step: 1 };
+    if (state.wil_uv) b.uv = { id: CONFIG.uv.id, naam: CONFIG.uv.naam, notitie: 'Verlengt de levensduur, stoot vuil af', prijs: CONFIG.uv.prijs, qty: 1, unit: 'st', step: 1 };
+    state.bundle = b;
+  }
+
+  function renderLines() {
+    bouwBundle();
+    var container = $('ejDynamicLines'); if (!container) return;
+    var html = '';
+    Object.keys(state.bundle).forEach(function (key) {
+      var item = state.bundle[key];
+      var lineTotal = item.qty * item.prijs;
+      html += '<div class="esails-line-item" id="ej-line-' + key + '">' +
+        '<div class="esails-line-info"><h5>' + esc(item.naam) + '</h5><p>' + esc(item.notitie) + '</p></div>' +
+        '<div class="esails-line-controls">' +
+          '<div class="esails-counter">' +
+            '<button type="button" data-item-key="' + key + '" data-delta="-1">−</button>' +
+            '<input type="text" value="' + formatQty(item) + '" readonly>' +
+            '<button type="button" data-item-key="' + key + '" data-delta="1">+</button>' +
+          '</div>' +
+          '<div class="esails-line-price" id="ej-price-' + key + '">€ ' + money(lineTotal) + '</div>' +
+        '</div></div>';
+    });
+    container.innerHTML = html;
+    calcTotal();
+  }
+  function formatQty(item) {
+    if (item.unit === 'm') return item.qty.toFixed(1) + ' m';
+    if (item.unit === 'set') return item.qty + ' set';
+    return String(item.qty);
+  }
+  function adjustQty(key, deltaSign) {
+    if (!state.bundle[key]) return;
+    var item = state.bundle[key];
+    var q = item.qty + deltaSign * (item.step || 1);
+    q = Math.round(q * 2) / 2;
+    if (q < 0) q = 0;
+    item.qty = q;
+    var line = $('ej-line-' + key);
+    if (line) {
+      var input = line.querySelector('input');
+      if (input) input.value = formatQty(item);
+      var priceEl = $('ej-price-' + key);
+      if (priceEl) priceEl.innerText = '€ ' + money(q * item.prijs);
+    }
+    calcTotal();
+  }
+  function calcTotal() {
+    var total = 0;
+    Object.keys(state.bundle).forEach(function (key) {
+      total += state.bundle[key].qty * state.bundle[key].prijs;
+    });
+    var el = $('ejTotalAmount');
+    if (el) el.innerText = '€ ' + money(total);
+  }
+
+  /* -------------------- NAVIGATIE / VALIDATIE -------------------- */
+  var STAP_NAMEN = ['Project', 'Afmetingen', 'Kleurstelling', 'Verwerking', 'Bevestiging', 'Klaar'];
+  function stapCompleet(stap) {
+    if (stap === 1) return !!state.project;
+    if (stap === 2) return state.lengte > 0 && state.breedte > 0;
+    if (stap === 3) return !!state.kleur;
+    if (stap === 4) return !!state.verwerking;
+    if (stap === 5) return !!state.bevestiging;
+    return true;
+  }
+  function toonStap(stap) {
+    var steps = root.querySelectorAll('.esails-wizard-step');
+    for (var i = 0; i < steps.length; i++) {
+      steps[i].classList.toggle('active', parseInt(steps[i].getAttribute('data-step'), 10) === stap);
+    }
+    var pct = (stap / TOTAL_INPUT_STEPS) * 100; if (pct > 100) pct = 100;
+    var bar = $('ejProgressBar'); if (bar) bar.style.width = pct + '%';
+    var ind = $('ejStepIndicator');
+    if (ind) ind.innerText = (stap <= TOTAL_INPUT_STEPS)
+      ? ('Stap ' + stap + ' van ' + TOTAL_INPUT_STEPS + ': ' + STAP_NAMEN[stap - 1])
+      : 'Jouw materiaallijst';
+
+    var prev = $('ejBtnPrev'), next = $('ejBtnNext');
+    prev.disabled = (stap === 1);
+    if (stap === RESULT_STEP) {
+      next.style.display = 'none';
+    } else {
+      next.style.display = '';
+      next.disabled = !stapCompleet(stap);
+      next.innerText = (stap === TOTAL_INPUT_STEPS) ? 'Bekijk pakket →' : 'Volgende';
+    }
+    var prevBox = $('ejPreview');
+    if (prevBox) prevBox.style.display = (stap === RESULT_STEP) ? 'none' : '';
+    if (stap === RESULT_STEP) renderLines();
+  }
+  function ga(naarStap) {
+    if (naarStap < 1) naarStap = 1;
+    if (naarStap > RESULT_STEP) naarStap = RESULT_STEP;
+    state.currentStep = naarStap;
+    toonStap(naarStap);
+  }
+
+  /* -------------------- EVENTS -------------------- */
+  function bindEvents() {
+    root.addEventListener('click', function (e) {
+      var selCard = e.target.closest('.esails-selection-card, .esails-color-card');
+      if (selCard && root.contains(selCard)) {
+        var group = selCard.getAttribute('data-group');
+        var value = selCard.getAttribute('data-value');
+        state[group] = value;
+        var siblings = root.querySelectorAll('[data-group="' + group + '"]');
+        for (var i = 0; i < siblings.length; i++) siblings[i].classList.remove('selected');
+        selCard.classList.add('selected');
+        if (group === 'kleur') renderPreview();
+        $('ejBtnNext').disabled = !stapCompleet(state.currentStep);
+        return;
+      }
+      var toggle = e.target.closest('[data-toggle]');
+      if (toggle) {
+        var k = toggle.getAttribute('data-toggle');
+        state[k] = !state[k];
+        toggle.classList.toggle('active', state[k]);
+        toggle.classList.toggle('esails-toggle-off', !state[k]);
+        toggle.innerHTML = state[k] ? '<span class="esails-check">✓</span> Toegevoegd' : 'Toevoegen';
+        return;
+      }
+      var counterBtn = e.target.closest('.esails-counter button');
+      if (counterBtn) {
+        adjustQty(counterBtn.getAttribute('data-item-key'), parseInt(counterBtn.getAttribute('data-delta'), 10));
+        return;
+      }
+      if (e.target.closest('#ejBtnNext')) { if (!$('ejBtnNext').disabled) ga(state.currentStep + 1); return; }
+      if (e.target.closest('#ejBtnPrev')) { ga(state.currentStep - 1); return; }
+      if (e.target.closest('#ejBtnAddToCart')) { addToCart(); return; }
+    });
+
+    root.addEventListener('input', function (e) {
+      var slider = e.target.closest('[data-slider]');
+      if (slider) {
+        var key = slider.getAttribute('data-slider');
+        state[key] = parseInt(slider.value, 10) || 0;
+        var valEl = $('ejVal_' + key);
+        if (valEl) valEl.innerText = state[key];
+        renderPreview();
+        $('ejBtnNext').disabled = !stapCompleet(state.currentStep);
+      }
+    });
+  }
+
+  /* -------------------- CART (zoals Bootkap) -------------------- */
+  function addToCart() {
+    var keys = Object.keys(state.bundle).filter(function (k) { return state.bundle[k].qty > 0; });
+    if (!keys.length) { alert('Voeg minimaal één product toe.'); return; }
+    var placeholder = keys.some(function (k) { return /^ID_/.test(state.bundle[k].id); });
+    if (placeholder) {
+      alert('Let op: er staan nog placeholder product-ID\'s in de configuratie. Vul de echte Lightspeed-ID\'s in voordat je live gaat.');
+      return;
+    }
+    var btn = $('ejBtnAddToCart');
+    var txt = btn.querySelector('.btn-text'), loader = btn.querySelector('.esails-loader');
+    btn.disabled = true; if (txt) txt.style.display = 'none'; if (loader) loader.style.display = 'inline-block';
+
+    var iframe = ensureFrame();
+    var i = 0;
+    function addNext() {
+      if (i >= keys.length) { window.location.href = '/cart'; return; }
+      var item = state.bundle[keys[i]]; i++;
+      postOne(iframe, item.id, Math.ceil(item.qty), addNext);  // Lightspeed verwacht hele aantallen
+    }
+    addNext();
+  }
+  function ensureFrame() {
+    var iframe = document.getElementById('ejCartFrame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'ejCartFrame'; iframe.name = 'ejCartFrame';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+    return iframe;
+  }
+  function postOne(iframe, productId, quantity, onDone) {
+    var form = document.createElement('form');
+    form.method = 'POST'; form.action = '/cart'; form.target = 'ejCartFrame'; form.style.display = 'none';
+    form.appendChild(hidden('product', productId));
+    form.appendChild(hidden('quantity', quantity));
+    document.body.appendChild(form);
+    var done = false;
+    function finish() {
+      if (done) return; done = true;
+      iframe.removeEventListener('load', finish);
+      if (form.parentNode) form.parentNode.removeChild(form);
+      onDone();
+    }
+    iframe.addEventListener('load', finish);
+    form.submit();
+    setTimeout(finish, 1500);
+  }
+  function hidden(name, value) {
+    var input = document.createElement('input');
+    input.type = 'hidden'; input.name = name; input.value = value;
+    return input;
+  }
+
+  /* -------------------- INIT -------------------- */
+  function init() {
+    root = $('esails-wizard-mount');
+    if (!root) return false;
+    if (root.getAttribute('data-ej-init') === '1') return true;
+    root.setAttribute('data-ej-init', '1');
+    injectPreviewCSS();
+    resetState();
+    root.innerHTML = wizardHTML();
+    bindEvents();
+    var kleurCard = root.querySelector('[data-group="kleur"][data-value="' + state.kleur + '"]');
+    if (kleurCard) kleurCard.classList.add('selected');
+    renderPreview();
+    toonStap(1);
+    return true;
+  }
+
+  /* Kleine CSS-aanvulling voor de live preview — sluit aan op de --esails-* tokens.
+     De rest van de styling komt uit de gedeelde Bootkap-CSS. */
+  function injectPreviewCSS() {
+    if (document.getElementById('ejPreviewCSS')) return;
+    var css =
+      '.esails-preview{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:32px 24px;margin-bottom:40px;}' +
+      '.esails-preview-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--esails-muted);font-weight:600;text-align:center;margin-bottom:20px;}' +
+      '.esails-preview-canvas{display:flex;justify-content:center;align-items:center;min-height:200px;}' +
+      '.esails-preview-stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:28px;}' +
+      '.esails-stat{flex:1;min-width:120px;max-width:170px;background:#fff;border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:14px 10px;text-align:center;}' +
+      '.esails-stat small{display:block;font-size:12px;color:var(--esails-muted);}' +
+      '.esails-stat strong{display:block;font-size:18px;font-weight:600;margin-top:6px;color:var(--esails-dark);}' +
+      '.esails-help-note{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:16px 20px;font-size:13.5px;color:var(--esails-muted);line-height:1.6;max-width:600px;margin:8px auto 0;}' +
+      '.esails-help-note strong{color:var(--esails-dark);}';
+    var style = document.createElement('style');
+    style.id = 'ejPreviewCSS'; style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  return { init: init };
+})();
+
+(function () {
+  function start() {
+    if (window.esailsJacuzziWizard.init()) return;
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+    window.addEventListener('load', start);
   } else {
-    init();
+    start();
   }
 })();
