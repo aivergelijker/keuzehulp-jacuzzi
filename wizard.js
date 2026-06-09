@@ -45,7 +45,8 @@ window.esailsJacuzziWizard = (function () {
     naadbreedte_cm: 4,
     lijm_g_per_m2: 350,
     pot250_g_max: 250,
-    loxx_per_cm: 60
+    loxx_per_cm: 60,
+    loxx_per_set: 10   // 1 Loxx-set = 10 stuks (koppen + schroeven + gratis sleutel)
   };
 
   var DOEKEN = [
@@ -236,7 +237,7 @@ window.esailsJacuzziWizard = (function () {
     var cx = 110 - w / 2, cy = 110 - h / 2;
     var d = DOEKEN.filter(function (x) { return x.key === state.kleur; })[0] || DOEKEN[0];
     var ease = 'transition:all .4s ease;';
-    return '<svg viewBox="0 0 220 220" width="100%" style="max-width:320px;display:block;margin:0 auto;">' +
+    return '<svg viewBox="0 0 220 220" width="100%" style="max-width:200px;display:block;margin:0 auto;">' +
       '<defs><filter id="ejShadow" x="-25%" y="-25%" width="150%" height="150%">' +
       '<feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#0f1c3f" flood-opacity="0.18"/></filter></defs>' +
       '<ellipse cx="110" cy="' + (cy + h + 15) + '" rx="' + (w / 2 * 0.9) + '" ry="9" fill="#000" opacity="0.06"/>' +
@@ -270,7 +271,8 @@ window.esailsJacuzziWizard = (function () {
       }
     }
     if (state.bevestiging === 'loxx') {
-      b.loxx = { id: CONFIG.loxx.id, naam: CONFIG.loxx.naam, notitie: 'Zelfborgende windvaste sluitingen', prijs: CONFIG.loxx.prijs, qty: r.loxx, unit: 'set', step: 1 };
+      var loxxSets = Math.ceil(r.loxx / REKEN.loxx_per_set);  // r.loxx = aantal stuks; 1 set = 10 stuks
+      b.loxx = { id: CONFIG.loxx.id, naam: CONFIG.loxx.naam, notitie: 'Zelfborgende windvaste sluitingen — ' + r.loxx + ' stuks (set van ' + REKEN.loxx_per_set + ')', prijs: CONFIG.loxx.prijs, qty: loxxSets, unit: 'set', step: 1 };
       b.stansblok = { id: CONFIG.stansblok.id, naam: CONFIG.stansblok.naam, notitie: 'Voor het aanbrengen van de sluitingen', prijs: CONFIG.stansblok.prijs, qty: 1, unit: 'st', step: 1 };
     } else if (state.bevestiging === 'shockcord') {
       b.shockcord = { id: CONFIG.shockcord.id, naam: CONFIG.shockcord.naam, notitie: 'Elastisch opspannen langs de onderrand', prijs: CONFIG.shockcord.prijs, qty: r.shock, unit: 'm', step: 1 };
@@ -454,8 +456,8 @@ window.esailsJacuzziWizard = (function () {
   }
   function postOne(iframe, productId, quantity, onDone) {
     var form = document.createElement('form');
-    form.method = 'POST'; form.action = '/cart'; form.target = 'ejCartFrame'; form.style.display = 'none';
-    form.appendChild(hidden('product', productId));
+    // Lightspeed verwacht het product-ID in het URL-pad: POST /cart/add/<id>/ met veld 'quantity'
+    form.method = 'POST'; form.action = '/cart/add/' + productId + '/'; form.target = 'ejCartFrame'; form.style.display = 'none';
     form.appendChild(hidden('quantity', quantity));
     document.body.appendChild(form);
     var done = false;
@@ -502,10 +504,10 @@ window.esailsJacuzziWizard = (function () {
          zodat de tool er identiek uitziet zonder de gedeelde CSS aan te passen. */
       '#esails-jacuzzi-mount,#esails-jacuzzi-mount *{box-sizing:border-box;}' +
       '#esails-jacuzzi-mount{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:block;max-width:900px;margin:40px auto;padding:30px;background:#ffffff;border:1px solid var(--esails-border,#e2e2e2);border-radius:var(--esails-radius,8px);color:var(--esails-dark,#111);box-shadow:0 4px 20px rgba(0,0,0,0.02);}' +
-      '.esails-preview{background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:32px 24px;margin-bottom:40px;}' +
-      '.esails-preview-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--esails-muted);font-weight:600;text-align:center;margin-bottom:20px;}' +
-      '.esails-preview-canvas{display:flex;justify-content:center;align-items:center;min-height:200px;}' +
-      '.esails-preview-stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:28px;}' +
+      '.esails-preview{position:sticky;top:8px;z-index:5;background:var(--esails-light);border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:16px 20px;margin-bottom:20px;box-shadow:0 6px 16px rgba(0,0,0,0.06);}' +
+      '.esails-preview-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--esails-muted);font-weight:600;text-align:center;margin-bottom:10px;}' +
+      '.esails-preview-canvas{display:flex;justify-content:center;align-items:center;min-height:130px;}' +
+      '.esails-preview-stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:14px;}' +
       '.esails-stat{flex:1;min-width:120px;max-width:170px;background:#fff;border:1px solid var(--esails-border);border-radius:var(--esails-radius);padding:14px 10px;text-align:center;}' +
       '.esails-stat small{display:block;font-size:12px;color:var(--esails-muted);}' +
       '.esails-stat strong{display:block;font-size:18px;font-weight:600;margin-top:6px;color:var(--esails-dark);}' +
