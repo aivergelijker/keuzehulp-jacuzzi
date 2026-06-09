@@ -21,21 +21,21 @@ window.esailsJacuzziWizard = (function () {
   /* -------------------- CONFIGURATIE -------------------- */
   var CONFIG = {
     doek: {
-      antraciet: { id: "ID_PVC_ANTRACIET", naam: "Serge Ferrari 705 — Antraciet", prijs: 30.95, unit: "meter" },
-      zwart:     { id: "ID_PVC_ZWART",     naam: "Serge Ferrari 705 — Jet Black", prijs: 30.95, unit: "meter" },
-      blauw:     { id: "ID_PVC_BLAUW",     naam: "Serge Ferrari 705 — Navy Blue", prijs: 30.95, unit: "meter" },
-      groen:     { id: "ID_PVC_GROEN",     naam: "Serge Ferrari 705 — Donkergroen", prijs: 30.95, unit: "meter" },
-      ecru:      { id: "ID_PVC_ECRU",      naam: "Serge Ferrari 705 — Ecru", prijs: 30.95, unit: "meter" }
+      antraciet: { id: "284515327", naam: "Serge Ferrari 705 — Antraciet # 1074", prijs: 30.95, unit: "meter" },
+      zwart:     { id: "274126768", naam: "Serge Ferrari 705 — Zwart # 1075", prijs: 30.95, unit: "meter" },
+      blauw:     { id: "274126759", naam: "Serge Ferrari 705 — Kobaltblauw # 1050", prijs: 30.95, unit: "meter" },
+      groen:     { id: "289467471", naam: "Serge Ferrari 705 — Mosgroen # 1054", prijs: 30.95, unit: "meter" },
+      ecru:      { id: "289467416", naam: "Serge Ferrari 705 — Ivoor # 1076", prijs: 30.95, unit: "meter" }
     },
     lijm: {
-      pot250: { id: "ID_SABA_250", naam: "Saba lijm — 250 ml met kwast", prijs: 11.75, unit: "stuk" },
-      bus1l:  { id: "ID_SABA_1L",  naam: "Saba lijm — 1 liter", prijs: 34.95, unit: "stuk" }
+      pot250: { id: "282388634", naam: "Saba lijm — 250 ml met kwast", prijs: 11.75, unit: "stuk" },
+      bus1l:  { id: "253895183",  naam: "Saba lijm — 1 liter", prijs: 32.99, unit: "stuk" }
     },
-    cleaner:   { id: "ID_SABA_CLEAN", naam: "Saba reiniger/ontvetter — 1 liter", prijs: 20.95, unit: "stuk" },
-    loxx:      { id: "ID_LOXX_SET",  naam: "Loxx snelsluiting — set", prijs: 27.90, unit: "set" },
-    stansblok: { id: "ID_STANSBLOK", naam: "Nylon stansblok (slagonderlegger)", prijs: 26.99, unit: "stuk" },
-    shockcord: { id: "ID_SHOCKCORD", naam: "Shockcord 6 mm — zwart", prijs: 0.83, unit: "meter" },
-    uv:        { id: "ID_303_UV",    naam: "303 UV-beschermer — 473 ml", prijs: 21.95, unit: "stuk" }
+    cleaner:   { id: "253891984", naam: "Saba reiniger/ontvetter — 1 liter", prijs: 20.95, unit: "stuk" },
+    loxx:      { id: "265509411",  naam: "Loxx snelsluiting — set", prijs: 27.90, unit: "set" },
+    stansblok: { id: "299203891", naam: "Nylon stansblok (slagonderlegger)", prijs: 16.95, unit: "stuk" },
+    shockcord: { id: "259527665", naam: "Shockcord 6 mm — zwart", prijs: 0.83, unit: "meter" },
+    uv:        { id: "252696446",    naam: "303 UV-beschermer — 473 ml", prijs: 24.95, unit: "stuk" }
   };
 
   /* Rekenconstanten — finetune hier zonder de logica te raken */
